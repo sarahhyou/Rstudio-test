@@ -1,0 +1,73 @@
+---
+title: "lime"
+author: "Sarah You"
+execute:
+  warning: false
+  message: false
+format:
+  html:
+    fig-width: 6
+    fig-height: 4
+    out-width: 60%
+    embed-resources: true
+---
+
+installing packages:
+```{r}
+# install.packages("lime")
+library(lime)
+library(randomForest)
+```
+
+build model:
+```{r}
+# R NO LONGER reads strings as factors by default
+mushrooms <- read.csv("mushrooms.csv", stringsAsFactors = TRUE)
+
+set.seed(5293)
+n <- nrow(mushrooms)
+test_idx <- sample(n, 1)
+train <- mushrooms[-test_idx, ]
+test  <- mushrooms[test_idx, ]
+
+# Train on encoded data
+rf <- randomForest(type ~., data = train)
+```
+
+Sample prediction:
+```{r}
+predict(rf, test)
+```
+```{r}
+model_type.randomForest <- function(x, ...) "classification"
+
+predict_model.randomForest <- function(x, newdata, type, ...) {
+  pred <- predict(x, newdata, type = "prob")
+  as.data.frame(pred)
+}
+```
+
+## LIME 
+
+```{r}
+explainer <- lime::lime(subset(train, select = -type), rf)
+```
+
+explain a test prediction:
+```{r}
+explanation <- lime::explain(
+  x = subset(test, select = -type),
+  explainer = explainer,
+  labels = "poisonous",
+  n_features = 4
+)
+explanation
+```
+
+Visualization:
+```{r}
+library(ggplot2)
+ggplot(explanation, aes(x = feature_weight, 
+                        y = reorder(feature_desc, abs(feature_weight)))) + geom_col() + 
+  labs(title = "contributions to poisonous prediction")
+```
