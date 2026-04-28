@@ -1,0 +1,414 @@
+---
+title: "Problem Set 1"
+authors: Sarah You
+execute:
+  warning: false
+  message: false
+format:
+  html:
+    fig-width: 6
+    fig-height: 4
+    out-width: 60%
+    embed-resources: true
+---
+
+## Instructions -- read carefully
+
+Complete the exercises below. All text should be included in markdown sections--not within code chunks (for example, using `cat()`, `print()` or comments.) 
+
+All code must follow the methods taught in class including **ggplot2** for all graphs, no for-loops, no additional packages besides **tidyverse** packages, native R pipe, etc. 
+
+For both code and verbal answers, you may use AI for research but not for coding or writing. Your code should not have unnecessary parameters, extra theme elements, etc. Likewise, your written answers should be short and to the point. Overly verbose answers will be penalized.
+
+### 1. Create the models
+
+Dataset: `reg_data.csv`
+
+Download from: [https://www.sciencebase.gov/catalog/item/5ba90b60e4b08583a5ca04a3](https://www.sciencebase.gov/catalog/item/5ba90b60e4b08583a5ca04a3)
+
+#### (a) For this question, we will be working with two models:
+
+Model 1: $$\mathbb{E}[Y \mid X_1, X_2, X_3]
+= \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_3 X_3$$
+
+Model 2: $$\mathbb{E}[\log(Y) \mid X_1, X_2, X_3]
+= \beta_0 + \beta_1 \log(X_1) + \beta_2 \log(X_2) + \beta_3 X_3$$
+
+$Y$ = 90th percentile of the annual maximum daily streamflow time series for the given streamgage
+
+$X_1$ =  Average precipitation over the basin
+
+$X_2$ = Drainage area of the streamgage
+
+$X_3$ = Relief ratio over the basin
+
+Read in data:
+```{r}
+df <- read.csv('reg_data.csv')
+```
+
+Fit model 1:
+```{r}
+lm_flow <- lm(max90 ~ PPTAVG_BASIN + DRAIN_SQKM + RRMEDIAN, df)
+```
+
+Fit model 2:
+```{r}
+log_lm_flow <- lm(log(max90) ~ log(PPTAVG_BASIN) + log(DRAIN_SQKM) + RRMEDIAN, df)
+```
+
+Explain in a few sentences what these models are trying to predict and why.
+
+Model 1 is trying to predict the potential maximum daily stream flow based on information related to the drainage basin including precipitation, basin area and relief. Model 2 is trying to predict the log scale of the potential maximum daily stream flow based on information related to the log scale of precipitation, the log scale of basin area and relief. 
+
+We can use the models to make predictions to assess for potential floods and prepare beforehand to minimize flooding-related damage in an area. 
+
+#### (b) Fit the models. Use methods learned in linear regression to compare goodness of fit for the models. Provide a brief interpretation.
+
+Since the models are not nested, we can compare goodness-of-fit via their AIC scores:
+```{r}
+AIC(lm_flow) 
+AIC(log_lm_flow)
+```
+
+We see the AIC score of the log transformed model is significantly lower than the original model, suggesting that the log transformed model provides a much better linear fit.
+
+### 2. Regression Diagnostics
+
+Analyze the residuals using methods from class to determine whether the assumptions of linear regression are met. (Use regular residuals, not standardized or studentized.) Your answer should be thorough: if multiple methods were presented (for example, for normality), use them all and compare the results.
+
+Linearity and Equal Variance test: Residual Plot
+
+Model 1:
+```{r}
+library(ggplot2)
+library(tidyverse)
+
+lm_flow |> ggplot(aes(.fitted, .resid)) + geom_point() + geom_hline(yintercept=0) + labs(title='Residuals Plot', x='Fitted Values', y='Residuals')
+```
+Model 2:
+```{r}
+log_lm_flow |> ggplot(aes(.fitted, .resid)) + geom_point() + geom_hline(yintercept=0) + labs(title='Residuals Plot', x='Fitted Values', y='Residuals')
+```
+The residuals of both models hover around 0 in a relatively uniform fashion, thus there is no evidence to suggest either model violated the linearity assumption. However, the residuals in model 1 fan out quite dramatically, clearly showing violation of the equal variance assumption. Model 2 does not show clear violation of the equal variance assumption.
+
+Independence: Because the `STAID`s are in strictly increasing order, I can check if the stream flow is independent of record order.
+
+Model 1:
+```{r}
+lm_flow |> ggplot(aes(log(df$STAID), .resid)) + geom_point() + geom_hline(yintercept=0) + labs(title='Independence Test', x='Row Order', y='Residuals')
+```
+
+Model 2:
+```{r}
+log_lm_flow |> ggplot(aes(log(df$STAID), .resid)) + geom_point() + geom_hline(yintercept=0) + labs(title='Independence Test', x='Row Order', y='Residuals')
+```
+Both models seem to not show any clear violations of the Independence assumption, at least between stream flow and data collection order.
+
+Normality: Histograms, Density curves, Theoretical Normal curves, QQ plots & the Shapiro-Wilk test
+
+Histogram of response variable for linear model `max90`:
+```{r}
+df |> ggplot(aes(x = max90)) + 
+  geom_histogram( mapping = aes(y = after_stat(density)), binwidth = 5000, boundary = 10, fill = 'plum', colour = 'mediumorchid') + 
+  geom_density(color = 'mediumslateblue', lwd = 0.75) + 
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(df$max90), sd = sd(df$max90)),
+                colour = 'blueviolet', lwd = 0.75)
+```
+
+Histogram of response variable for log-transform model `max90`:
+```{r}
+df |> ggplot(aes(x = log(max90))) + geom_histogram(
+  mapping = aes(y = after_stat(density)), 
+  binwidth = 0.5, boundary = 0.5,
+  fill = 'plum', colour = 'mediumorchid') +
+  geom_density(colour = 'mediumslateblue', lwd = 0.75) + 
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(log(df$max90)), sd = sd(log(df$max90))), colour = 'blueviolet', lwd = 0.75)
+```
+We see that the response variable for the linear model clearly does not exhibit a normal distribution; the response is heavily right skewed. The log transform makes the response variable resemble much closer to a normal distribution.
+
+QQ plot of linear model:
+
+```{r}
+lm_flow |> ggplot(aes(sample=max90)) + geom_qq(colour='#7E63DB') + geom_qq_line(colour='#6395DB') + labs(title='QQ plot', x='Theoretical Quantiles', y='Empirical Quantiles')
+```
+
+QQ plot of log transformed model:
+
+```{r}
+lm_flow |> ggplot(aes(sample=log(max90))) + geom_qq(colour='#7E63DB') + geom_qq_line(colour='#6395DB') + labs(title='QQ plot', x='Theoretical Quantiles', y='Empirical Quantiles')
+```
+
+Once again we see the unchanged response variable exhibits signs of a right skewed distribution in the QQ plots. The log transformation seems to have corrected most of the issues and the new response variable is approximately normal as shown in the QQ plot below.
+
+Shapiro-Wilk Test:
+```{r}
+shapiro.test(lm_flow$residuals)
+shapiro.test(log_lm_flow$residuals)
+```
+
+The Shapiro-Wilk test for both the standard LS and log transformed model show extremely strong evidence to reject the null hypothesis and conclude there is a violation in normality assumptions. However, the p-value for the log transformed model *is* lower than the standard LS, suggesting the evidence to reject the null hypothesis is a *bit* weaker, thus log transformation does somewhat improve normality.
+
+### 3. Coefficient plots
+
+#### (a) Using the same models, create coefficient plots showing 95% confidence intervals for the model coefficients.
+
+Linear model:
+
+```{r}
+m_line <- confint(lm_flow)
+colnames(m_line) <- c('lowerbound', 'upperbound')
+mod_line_coef_df <- data.frame(m_line) |> 
+  rownames_to_column('var') |> 
+  mutate(coef = lm_flow$coefficients) |> 
+  filter(var != "(Intercept)")
+
+mod_line_coef_df |> ggplot(aes(y = var, x = coef,
+  xmin = lowerbound, xmax = upperbound)) + 
+  geom_vline(xintercept = 0, color = 'skyblue') + 
+  geom_errorbar(orientation = 'y') + 
+  geom_point(color = 'navy', size = 1.5) 
+```
+
+Log-transformed model:
+
+```{r}
+m_log <- confint(log_lm_flow)
+colnames(m_log) <- c('lowerbound', 'upperbound')
+mod_log_coef_df <- data.frame(m_log) |> 
+  rownames_to_column('var') |> 
+  mutate(coef = log_lm_flow$coefficients) |> 
+  filter(var != "(Intercept)")
+
+mod_log_coef_df |> ggplot(aes(y = var, x = coef,
+  xmin = lowerbound, xmax = upperbound)) + 
+  geom_vline(xintercept = 0, color = 'skyblue') + 
+  geom_errorbar(orientation = 'y') + 
+  geom_point(color = 'navy', size = 1.5) 
+```
+
+#### (b) Interpret the graphs in a.
+
+Because `RRMEDIAN` has very small values in comparison to `PPTAVG_BASIN` and `DRAIN_SQKM`, the coefficients get magnified to have the same "contribution" to the model. This makes the `RRMEDIAN` coefficients hard to interpret the significance w.r.t the other two variables as exemplified in the coefficient plot. Not only do we struggle to meaningfully determine what $\beta_j$ for `RRMEDIAN` as the CI is so large, we also can't pinpoint the intervals for the other two variables as it is extremely hard to read from the plot alone.
+
+Taking the log transform of `PPTAVG_BASIN` and `DRAIN_SQKM` reduces the range of these variables significantly. This makes the scale more consistent between the variables and we can see the significance of each predictor more clearly. In this plot we see that the confidence interval of $\beta_j$ for `PPTAVG_BASIN` and `DRAIN_SQKM` clearly sit above 0, giving strong evidence to reject the null hypothesis and conclude the predictor is significant to the overall model. Conversely, as the confidence interval for `RRMEDIAN` still contains 0, there is weak evidence to reject the null hypothesis and we conclude that this predictor may not significantly contribute to the overall model. However, as the scale of the predictors still differs, we cannot make any comparisons between predictors.
+
+#### (c) Recreate the graphs in a. with standardized coefficients.
+
+First we create models with standardized coefficients:
+
+```{r}
+lm_flow_std <- lm(scale(max90) ~ scale(PPTAVG_BASIN) + scale(DRAIN_SQKM) + scale(RRMEDIAN), df)
+log_flow_std <- lm(scale(log(max90)) ~ scale(log(PPTAVG_BASIN)) + scale(log(DRAIN_SQKM)) + scale(RRMEDIAN), df)
+```
+
+Then we recreate the coefficient plots:
+
+```{r}
+m_line_std <- confint(lm_flow_std)
+colnames(m_line_std) <- c('lowerbound', 'upperbound')
+mod_line_coef_df_std <- data.frame(m_line_std) |> 
+  rownames_to_column('var') |> 
+  mutate(coef = lm_flow_std$coefficients) |> 
+  filter(var != "(Intercept)")
+
+mod_line_coef_df_std |> ggplot(aes(y = var, x = coef,
+  xmin = lowerbound, xmax = upperbound)) + 
+  geom_vline(xintercept = 0, color = 'skyblue') + 
+  geom_errorbar(orientation = 'y') + 
+  geom_point(color = 'navy', size = 1.5)
+```
+```{r}
+m_log_std <- confint(log_flow_std)
+colnames(m_log_std) <- c('lowerbound', 'upperbound')
+mod_log_coef_df_std <- data.frame(m_log_std) |> 
+  rownames_to_column('var') |> 
+  mutate(coef = log_flow_std$coefficients) |> 
+  filter(var != "(Intercept)")
+
+mod_log_coef_df_std |> ggplot(aes(y = var, x = coef,
+  xmin = lowerbound, xmax = upperbound)) + 
+  geom_vline(xintercept = 0, color = 'skyblue') + 
+  geom_errorbar(orientation = 'y') + 
+  geom_point(color = 'navy', size = 1.5) 
+```
+
+
+#### (d) Interpret the graphs in c., comparing to a.
+
+Because 0 is in the confidence interval for the scaled coefficient of `RRMEDIAN`, we can conclude even more certainly that a change in `RRMEDIAN` by one standard deviation might not impact the standard deviation of either the response or log response, which would highyl suggest `RRMEDIAN` is not a important predictor.
+
+Now that `PPTAVG_BASIN` and `DRAIN_SQKM` are de-scaled, comparison between the CIs is possible. In the linear model, both the upper and lower bounds of `DRAIN_SQKM` is slightly to the right of the corresponding bounds of `PPTAVG_BASIN`, suggesting a one standard deviation change in `DRAIN_SQKM` leads to a slightly larger change in standard deviation in the response. The standardized log transform coefficient plot makes the different much more obvious, where the lower bound of log(`DRAIN_SQKM`) is to the right of the upper bound of log(`PPTAVG_BASIN`), suggesting a change in one standard deviation in log(`DRAIN_SQKM`) leads to a much larger change in standard deviation in the log response. 
+
+These results point to `DRAIN_SQKM` is the most influential predictor, then `PPTAVG_BASIN`. `RRMEDIAN` is not a very important predictor.
+
+### 4. Bootstrap confidence intervals
+
+#### (a) Use methods from class to compare bootstrap confidence intervals with the CIs determined in Q3.
+
+Bootstrapping function:
+```{r}
+# Set seed for reproducibility
+set.seed(5293)
+boot_coef_calc <- function(recipe, data, nb, ci_og_df){
+  n <- nrow(data) 
+  
+  boot_coefs <- t(replicate(nb, {
+    idx = sample(n, replace = TRUE)
+    coef(lm(recipe, data = data[idx, ]))
+  }
+))
+  boot_coefs <- boot_coefs[, -1]
+  ci_boot <- t(apply(boot_coefs, 2, quantile, probs = c(0.025, 0.975)))
+  ci_og <- cbind("2.5%" = ci_og_df$lowerbound, '97.5%' = ci_og_df$upperbound)
+  rownames(ci_og) = ci_og_df$var
+  
+  return(list(ci_boot = ci_boot, ci_og = ci_og))
+}
+```
+
+Apply on all models for 10000 simulations:
+
+1. Original LS:
+```{r}
+boot_coef_calc(max90 ~ PPTAVG_BASIN + DRAIN_SQKM + RRMEDIAN, df, 10000, mod_line_coef_df)
+```
+2. Log Transform:
+```{r}
+boot_coef_calc(log(max90) ~ log(PPTAVG_BASIN) + log(DRAIN_SQKM) + RRMEDIAN,
+               df, 10000, mod_log_coef_df)
+```
+
+#### (b) For each model, by how much do the bootstrap CIs differ from the formula based CIs? Provide a brief interpretation.
+
+For both models we see the formula based CIs provide a narrower upper and lower bound compared to the bootstrap CIs. This is expected as the bootstrap method is attempting to estimate the parameter distribution via resampling and thus is fundamentally somewhat imprecise. Additionally, we see the bootstrap CIs for log transformed model coefficients tend to have significantly narrower upper and lower bounds than the standard LS when comparing the difference in the bootstrap and formula based CIs. This is also expected as the log transformations make the originally much larger variables `PPTAVG_BASIN` and `DRAIN_SQKM` have a range closer to `RRMEDIAN`; in a way the log transformation can be seen as a variable standardizing process.
+
+
+### 5. Coefficient x effect plots
+
+#### (a) Create coefficient x effect plot for the two models.
+
+Linear model:
+```{r}
+plot_lm <- df
+plot_lm$PPTAVG_BASINxcoef <- plot_lm$PPTAVG_BASIN * coef(lm_flow)['PPTAVG_BASIN']
+plot_lm$DRAIN_SQKMxcoef <- plot_lm$DRAIN_SQKM * coef(lm_flow)['DRAIN_SQKM']
+plot_lm$RRMEDIANxcoef <- plot_lm$RRMEDIAN * coef(lm_flow)['RRMEDIAN']
+plot_lm <- plot_lm |> select(PPTAVG_BASINxcoef, DRAIN_SQKMxcoef, RRMEDIANxcoef) |> pivot_longer(
+  cols = PPTAVG_BASINxcoef:RRMEDIANxcoef,names_to = "features", values_to = "values")
+plot_lm_means <- plot_lm |> group_by(features) |> summarise(values = mean(values))
+
+ggplot(plot_lm, aes(x = values, y = features)) + 
+  geom_jitter(colour = '#E68198', height = 0.3, alpha = 0.7) + 
+  geom_point(data = plot_lm_means, colour = '#A15CE6', size = 3) + 
+  theme_minimal() + 
+  labs(x = "values", y = "feature")
+
+```
+
+```{r}
+plot_log <- df 
+plot_log['PPTAVG_BASIN'] = log(plot_log['PPTAVG_BASIN'])
+plot_log['DRAIN_SQKM'] = log(plot_log['DRAIN_SQKM'])
+plot_log$DRAIN_SQKMxcoef <- plot_log$DRAIN_SQKM * coef(log_lm_flow)['log(DRAIN_SQKM)']
+plot_log$PPTAVG_BASINxcoef <- plot_log$PPTAVG_BASIN * coef(log_lm_flow)['log(PPTAVG_BASIN)']
+plot_log$RRMEDIANxcoef <- plot_log$RRMEDIAN * coef(log_lm_flow)['RRMEDIAN']
+plot_log <- plot_log |> select(PPTAVG_BASINxcoef, DRAIN_SQKMxcoef, RRMEDIANxcoef) |> pivot_longer(
+  cols = PPTAVG_BASINxcoef:RRMEDIANxcoef,names_to = "features", values_to = "values")
+plot_lm_means <- plot_log |> group_by(features) |> summarise(values = mean(values))
+
+ggplot(plot_log, aes(x = values, y = features)) + 
+  geom_jitter(colour = '#E68198', height = 0.3, alpha = 0.7) + 
+  geom_point(data = plot_lm_means, colour = '#A15CE6', size = 3) + 
+  theme_minimal() + 
+  labs(x = "values", y = "feature")
+
+```
+
+#### (b) Compare your results from part a. with results from Q3. 
+
+TODO: How do we interpret the plots again?
+
+We see the plots substantiating the claims made in Q3. In both the standard LS and log transform coefficient $\times$ feature plots, the range and spread for `PPTAVG_BASIN` and `DRAIN_SQKM` is broader than `RRMEDIAN`, showing the aformentioned features have a significantly higher contribution to variations in the model. Furthermore, we see `DRAIN_SQKM` having much wider spread and range compared to `PPTAVG_BASIN`, and the difference is much clearer in the log transformed model, providing additional support to argue that `DRAIN_SQKM` is the more important feature.
+
+### 6. Variable added plots
+
+For this question, use the `alr4::Highway` dataset.
+
+#### (a) Find the coefficients for the following models with mean functions:
+
+full model: $$\hat{E}(rate|trks, acpt, slim) = \beta_0 + \beta_1trks + \beta_2acpt + \beta_3slim$$
+
+model 1: $$\hat{E}(rate|trks, acpt) = b_0 + b_1trks + b_2acpt$$
+
+model 2: $$\hat{E}(rate|slim) = b_0 + b_1slim$$
+
+```{r}
+df2 <- alr4::Highway
+
+lm_full <- lm(rate ~ trks + acpt + slim, df2)
+lm_red1 <- lm(rate ~ trks + acpt, df2)
+lm_red2 <- lm(rate ~ slim, df2)
+```
+
+Show model coefficients
+```{r}
+list(
+  'coefficients of different models', 
+  lm_full$coefficients,
+  lm_red1$coefficients,
+  lm_red2$coefficients)
+```
+
+Compare $R^2$ from the full model to the $R^2$ values for the two models. What do you learn about the regressors from these values?
+
+```{r}
+c(summary(lm_full)$r.squared, 
+  summary(lm_red1)$r.squared,
+  summary(lm_red2)$r.squared)
+```
+We see `slim` alone can explain around 46.37\% of variation in the data, and `trks + acpt` can explain 63.26\% of variation. However, when combined together, all three variables explain 67.74\% of variation, which is far less than the sum of its parts. This suggests `slim` is highly correlated with one of `trks` or `acpt`.
+
+#### (b) How much additional variation is explained by the addition of `slim` to model 1?
+
+$$67.7377 - 63.2615 = \boxed{4.4762\% \text{ increase in }R^2}$$
+which is the additional variation explainable by the model.
+
+#### (c) Create an added variable plot for `slim` and add the best fitting line. (Hint: unlike the example in class, there are *two* other regressors in the problem besides `slim`.)
+
+```{r}
+rate_trks_acpt <- lm_red1$residuals
+slim_mod <- lm(slim ~ trks + acpt, df2)
+slim_trks_acpt = slim_mod$residuals
+slim_df <- data.frame(cbind(slim_trks_acpt, rate_trks_acpt))
+
+add_var_explain_model <- lm(rate_trks_acpt ~ slim_trks_acpt)
+
+#plot residuals
+ggplot(slim_df, aes(x = slim_trks_acpt, y = rate_trks_acpt)) + 
+  geom_point(colour = "#457B9D") + 
+  geom_smooth(method = 'lm', colour = '#1D3557', se = FALSE) + 
+  labs(
+    title = "rate ~ slim adjusting for trks and acpt",
+    x = "slim", y = "rate"
+  )
+```
+
+#### (d) Determine and interpret the slope of the line in part c. 
+
+```{r}
+add_var_explain_model$coefficients
+```
+With a coefficient of -0.0984, `slim` has a very small negative impact on `rate` after accounting for `trks` and `acpt`.
+
+#### (e) Determine and the $R^2$ of the regression in part d. and relate it to the $R^2$ values from part a.
+
+```{r}
+# R^2 of part d
+summary(add_var_explain_model)$r.squared 
+# relate it back to part a
+(1 - summary(lm_red1)$r.squared) * summary(add_var_explain_model)$r.squared
+```
+The $R^2$ of the added variable model is 0.1218, which means `slim` can explain around 12.18\% of unexplained variation from model 1. This is identical to the difference between the $R^2$ of the full model and the $R^2$ of model 1 in part (a) and (b). 
