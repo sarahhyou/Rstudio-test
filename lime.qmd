@@ -71,3 +71,5 @@ ggplot(explanation, aes(x = feature_weight,
                         y = reorder(feature_desc, abs(feature_weight)))) + geom_col() + 
   labs(title = "contributions to poisonous prediction")
 ```
+
+HEY! DO NOT EAT RANDOM MUSHROOMS THAT YOU SEE! UNLESS YOU ARE 100% CERTAIN!
